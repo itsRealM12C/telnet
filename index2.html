@@ -228,7 +228,93 @@ document.getElementById('custom-command').addEventListener('keypress', (e) => {
         e.target.value = '';
     }
 });
+
+
+    // Add this to your existing script.js or within <script> tags
+let currentCommand = '';
+let cursorPosition = 0;
+
+term.onKey(({ key, domEvent }) => {
+    // Handle Enter key
+    if (domEvent.key === 'Enter') {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'input',
+                data: currentCommand + '\r\n'
+            }));
+
+            /// new code here
+        }
+        term.write('\r\n');
+        currentCommand = '';
+        cursorPosition = 0;
+        return;
+    }
+
+    // Handle Backspace
+    if (domEvent.key === 'Backspace') {
+        if (cursorPosition > 0) {
+            currentCommand = currentCommand.slice(0, cursorPosition - 1) + currentCommand.slice(cursorPosition);
+            cursorPosition--;
+            
+            // Move cursor back, clear character, move back again
+            term.write('\x1B[D');
+            term.write('\x1B[P');
+            return;
+        }
+        return;
+    }
+
+    // Handle Arrow keys
+    if (domEvent.key === 'ArrowLeft') {
+        if (cursorPosition > 0) {
+            cursorPosition--;
+            term.write('\x1B[D');
+        }
+        return;
+    }
+    if (domEvent.key === 'ArrowRight') {
+        if (cursorPosition < currentCommand.length) {
+            cursorPosition++;
+            term.write('\x1B[C');
+        }
+        return;
+    }
+
+    // Handle Space and other characters
+    if (domEvent.key === ' ' || key.length === 1) {
+        const char = domEvent.key === ' ' ? ' ' : key;
+        currentCommand = currentCommand.slice(0, cursorPosition) + char + currentCommand.slice(cursorPosition);
+        cursorPosition++;
+        
+        // If inserting in middle, we need to re-write the rest of the line
+        if (cursorPosition <= currentCommand.length) new
+            term.write(char);
+            if (cursorPosition < currentCommand.length) {
+                const remaining = currentCommand.slice(cursorPosition);
+                term.write(remaining);
+                // Move cursor back to correct position
+                term.write(`\x1B[${remaining.length}D`);
+            }
+        } else {
+            term.write(char);
+        }
+        return;
+    }
+
+    // Handle Delete key
+    if (domEvent.key === 'Delete') {
+        if (cursorPosition < currentCommand.length) {
+            currentCommand = currentCommand.slice(0, cursorPosition) + currentCommand.slice(cursorPosition + 1);
+            term.write('\x1B[P');
+            return;
+        }
+    }
+});
+
+// Initialize terminal with proper control sequence support
+term.write('\x1B[?25h'); // Show cursor
 </script>
 
 </body>
-</html>
+</html> 

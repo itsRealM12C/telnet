@@ -109,52 +109,83 @@
                 
         
 // Add this to your existing script.js or within <script> tags
-let currentCommand = '';
+let commandBuffer = '';
+let cursorPosition = 0;
 
 term.onKey(({ key, domEvent }) => {
+    // Handle Enter key
     if (domEvent.key === 'Enter') {
-        // Send the complete command (with spaces) when Enter is pressed
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({
                 type: 'input',
-                data: currentCommand + '\r\n'
+                data: commandBuffer + '\r\n'
             }));
         }
         term.write('\r\n');
-        currentCommand = ''; // Reset for next command
-    } 
-    else if (domEvent.key === 'Backspace') {
-        // Handle backspace properly
-        if (currentCommand.length > 0) {
-            currentCommand = currentCommand.slice(0, -1);
-            term.write('\b \b');
+        commandBuffer = '';
+        cursorPosition = 0;
+        return;
+    }
+
+    // Handle Backspace
+    if (domEvent.key === 'Backspace') {
+        if (cursorPosition > 0) {
+            // Remove character at cursor position - 1
+            commandBuffer = commandBuffer.slice(0, cursorPosition - 1) + commandBuffer.slice(cursorPosition);
+            cursorPosition--;
+            
+            // Update terminal display
+            term.write('\x1B[D');  // Move cursor left
+            term.write(commandBuffer.slice(cursorPosition) + ' '); // Rewrite remaining chars
+            term.write(`\x1B[${commandBuffer.slice(cursorPosition).length + 1}D`); // Move cursor back
         }
+        return;
     }
-    else if (key.length === 1 || domEvent.key === ' ') {
-        // Handle regular characters and spaces
-        currentCommand += key;
+
+    // Handle Arrow keys
+    if (domEvent.key === 'ArrowLeft') {
+        if (cursorPosition > 0) {
+            cursorPosition--;
+            term.write('\x1B[D');
+        }
+        return;
+    }
+    if (domEvent.key === 'ArrowRight') {
+        if (cursorPosition < commandBuffer.length) {
+            cursorPosition++;
+            term.write('\x1B[C');
+        }
+        return;
+    }
+
+    // Handle Space and printable characters
+    if (domEvent.key === ' ' || (key.length === 1 && !domEvent.ctrlKey && !domEvent.metaKey)) {
+        // Insert character at cursor position
+        commandBuffer = commandBuffer.slice(0, cursorPosition) + key + commandBuffer.slice(cursorPosition);
+        cursorPosition++;
+        
+        // Update terminal display
         term.write(key);
+        if (cursorPosition < commandBuffer.length) {
+            term.write(commandBuffer.slice(cursorPosition));
+            term.write(`\x1B[${commandBuffer.slice(cursorPosition).length}D`);
+        }
+        return;
     }
-    // Special case for spacebar
-    else if (domEvent.key === ' ') {
-        currentCommand += ' ';
-        term.write(' ');
+
+    // Handle Delete key
+    if (domEvent.key === 'Delete') {
+        if (cursorPosition < commandBuffer.length) {
+            commandBuffer = commandBuffer.slice(0, cursorPosition) + commandBuffer.slice(cursorPosition + 1);
+            term.write(commandBuffer.slice(cursorPosition) + ' ');
+            term.write(`\x1B[${commandBuffer.slice(cursorPosition).length + 1}D`);
+        }
     }
 });
 
-// Also update your COPY TERM input handler to preserve spaces:
-document.getElementById('custom-command').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        const cmd = e.target.value;
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({
-                type: 'input',
-                data: cmd + '\r\n' // Preserves spaces in pasted commands
-            }));
-        }
-        e.target.value = '';
-    }
-});
+// Initialize terminal with proper control sequence support
+term.write('\x1B[?25h'); // Show cursor
+term.write('\x1B[?7h');  // Enable auto-wrap
 </script>
 
 </body>

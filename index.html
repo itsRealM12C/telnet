@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LG TV Telnet Client</title>
+    <link rel="stylesheet" href="https://unpkg.com/xterm@5.1.0/css/xterm.css">
+    <style>
+        body { margin:0; padding:10px; background:#000; }
+        #terminal { height:90vh; width:100%; }
+        .controls { 
+            display:grid; 
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap:10px; 
+            margin:10px 0;
+            padding:10px;
+            background:#222;
+        }
+        input { padding:8px; background:#333; color:#0f0; border:1px solid #444; }
+        button { 
+            padding:8px; 
+            background:#4CAF50; 
+            color:white; 
+            border:none; 
+            cursor:pointer; 
+        }
+        button:disabled { background:#555; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <input type="text" id="tv-ip" placeholder="TV IP" value="192.168.1.100">
+        <input type="number" id="tv-port" placeholder="Port" value="23">
+        <input type="text" id="tv-user" placeholder="Username" value="root">
+        <input type="password" id="tv-pass" placeholder="Password" value="alpine">
+        <button id="connect-btn" onclick="connect()">Connect</button>
+        <button id="disconnect-btn" onclick="disconnect()" disabled>Disconnect</button>
+    </div>
+    <div id="terminal"></div>
+
+    <script src="https://unpkg.com/xterm@5.1.0/lib/xterm.js"></script>
+    <script>
+        const term = new Terminal({
+            theme: {
+                background: '#000',
+                foreground: '#0f0',
+                cursor: '#0f0'
+            }
+        });
+        term.open(document.getElementById('terminal'));
+        let socket = null;
+        
+        function updateUI(connected) {
+            document.getElementById('connect-btn').disabled = connected;
+            document.getElementById('disconnect-btn').disabled = !connected;
+        }
+        
+        function connect() {
+            const tvIP = document.getElementById('tv-ip').value.trim();
+            const port = document.getElementById('tv-port').value || 23;
+            const user = document.getElementById('tv-user').value.trim();
+            const pass = document.getElementById('tv-pass').value;
+            
+            if(!tvIP) return term.writeln('ERROR: TV IP required');
+            
+            term.reset();
+            term.writeln(`Connecting to ${tvIP}:${port}...`);
+            
+            socket = new WebSocket(`ws://${location.hostname}:3000/connect`);
+            
+            socket.onopen = () => {
+                socket.send(JSON.stringify({
+                    action: 'connect',
+                    ip: tvIP,
+                    port: port,
+                    username: user,
+                    password: pass
+                }));
+            };
+            
+            socket.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if(data.type === 'output') {
+                    term.write(data.content);
+                } else if(data.type === 'error') {
+                    term.writeln(`\r\nERROR: ${data.content}\r\n`);
+                }
+            };
+            
+            socket.onclose = () => {
+                term.writeln('\r\nDISCONNECTED\r\n');
+                updateUI(false);
+            };
+            
+            term.onData(data => socket?.send(JSON.stringify({
+                type: 'input',
+                data: data
+            })));
+            
+            updateUI(true);
+        }
+        
+        function disconnect() {
+            if(socket) {
+                socket.send(JSON.stringify({ action: 'disconnect' }));
+                socket.close();
+            }
+            updateUI(false);
+        }
+
+
+    </script>
+<script>
+let socket = null;
+
+function connect() {
+    const tvIP = document.getElementById('tv-ip').value;
+    const port = document.getElementById('tv-port').value || 23;
+    const user = document.getElementById('tv-user').value || 'root';
+    const pass = document.getElementById('tv-pass').value || 'alpine';
+
+    term.reset();
+    term.writeln(`Connecting to ${tvIP}:${port}...`);
+    
+    socket = new WebSocket(`ws://${window.location.hostname}:3000`);
+    
+    socket.onopen = () => {
+        socket.send(JSON.stringify({
+            action: 'connect',
+            ip: tvIP,
+            port: port,
+            username: user,
+            password: pass
+        }));
+        updateUI(true);
+    };
+    
+    socket.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'output') {
+            term.write(data.content);
+        } else if (data.type === 'status') {
+            term.writeln(`\r\n${data.content}\r\n`);
+            updateUI(data.content !== 'DISCONNECTED');
+        }
+    };
+    
+    socket.onerror = () => {
+        term.writeln('\r\nCONNECTION FAILED\r\n');
+        updateUI(false);
+    };
+    
+    term.onData(data => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'input',
+                data: data
+            }));
+        }
+    });
+}
+
+function disconnect() {
+    if (socket) {
+        socket.send(JSON.stringify({ action: 'disconnect' }));
+        socket.close();
+    }
+    updateUI(false);
+}
+
+function updateUI(connected) {
+    document.getElementById('connect-btn').disabled = connected;
+    document.getElementById('disconnect-btn').disabled = !connected;
+}
+
+// Add to your existing copy-section functionality
+document.getElementById('custom-command').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && socket && socket.readyState === WebSocket.OPEN) {
+        const cmd = e.target.value;
+        socket.send(JSON.stringify({
+            type: 'input',
+            data: cmd + '\n'
+        }));
+        e.target.value = '';
+    }
+});
+</script>
+
+</body>
+</html>

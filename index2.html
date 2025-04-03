@@ -108,7 +108,10 @@
 
                 
         
-// Add this to your existing script.js or within <script> tags
+
+</script>
+<script>
+    // Add this to your existing script.js or within <script> tags
 let commandBuffer = '';
 let cursorPosition = 0;
 
@@ -187,6 +190,5 @@ term.onKey(({ key, domEvent }) => {
 term.write('\x1B[?25h'); // Show cursor
 term.write('\x1B[?7h');  // Enable auto-wrap
 </script>
-
 </body>
 </html> 
